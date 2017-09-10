@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Text;
@@ -26,7 +27,11 @@ namespace Serienlook
         List<String> listSearchResults = new List<String>();
         string sApikey = "8d6f5e3ef9008fb0f47871820feafcec";
         string sTvRequest = string.Format(@"https://api.themoviedb.org/3/search/tv?api_key=8d6f5e3ef9008fb0f47871820feafcec&query=");
-
+        string posterPath = (@"https://image.tmdb.org/t/p/w500/");
+        List<Result> resultList = new List<Result>();
+        private int lastComboboxIndex = -1;
+        private System.IO.StreamReader reader;
+        private string lastComboBoxSearch = "OwlCatDestroyer";
 
         public MainWindow()
         {
@@ -63,29 +68,27 @@ namespace Serienlook
 
         private void combobox_search_KeyDown(object sender, KeyEventArgs e)
         {
+            ComboBox combobox_search = sender as ComboBox;
+     
             if (e.Key == Key.Enter)
             {
-                listSearchResults.Clear();
-                combobox_search.ItemsSource = listSearchResults;
+                if (combobox_search.Text.ToLower().Contains(lastComboBoxSearch.ToLower())) return;
+                
+               
+                resultList.Clear();                                                     // Clear for each search
+                combobox_search.ItemsSource = resultList;                               // Clear ComboBox
                 var html = String.Format(sTvRequest + combobox_search.Text);
+                int overviewIndex = 0;
+                int lastIndex = 0;
 
                 WebRequest req = HttpWebRequest.Create(html);
                 req.Method = "GET";
 
                 string source;
-                using (System.IO.StreamReader reader = new System.IO.StreamReader(req.GetResponse().GetResponseStream()))
+
+                using (reader = new System.IO.StreamReader(req.GetResponse().GetResponseStream()))
                 {
                     source = reader.ReadToEnd();
-                }
-
-
-
-                //Console.WriteLine(source);
-
-                if (source == null)
-                {
-                    Console.Error.WriteLine("fehler, source == null!");
-                    return;
                 }
 
                 // Remove { and } at start and end
@@ -93,7 +96,7 @@ namespace Serienlook
                 source.Remove(source.Length - 1);
 
                 List<String> resultsArray = source.Split('{').ToList();
-                List<Result> resultList = new List<Result>();
+
 
                 resultsArray.RemoveRange(0, 2);      // Remove first two Elements because one is empty and one is General
 
@@ -113,89 +116,117 @@ namespace Serienlook
                     // Remove "Origin Country Entry"
                     resultInformation.RemoveAt(resultInformation.Count - 1);
 
-                    int overviewIndex = resultInformation.FindIndex(element => element.Contains("overview"));
+
+
+                    // Here starts Info editing:
+                    foreach (var info in resultInformation)
+                    {
+                        //Console.WriteLine("Index:{0}: {1}", resultInformation.IndexOf(info), info);
+                        if (info.Contains("overview"))
+                        {
+                            overviewIndex = resultInformation.IndexOf(info);
+                            lastIndex = resultInformation.Count - 1;
+                            break;
+                        }
+                    }
+
                     StringBuilder description = new StringBuilder();
 
-                    // Build Description from several Elements
-                    for (int overViewCounter = overviewIndex; overViewCounter <= resultInformation.Count - 1; overViewCounter++)
+                    // Create Description out of Elements
+                    for (int i = overviewIndex; i <= lastIndex; i++)
                     {
-                        description.Append(resultInformation[overViewCounter]);
-                    }
-                    // Then remove old, copied elemets // Irgendwo fehler
-                    resultInformation.RemoveRange(overviewIndex+1, resultInformation.Count-overviewIndex);
-
-                    resultInformation[overviewIndex] = description.ToString();
-
-
-                    foreach (var item in resultInformation)
-                    {
-                        Console.WriteLine(resultInformation.ToList().IndexOf(item) + item);
-
-                        if (!item.Contains(":")) { Console.WriteLine("Fehler1"); continue; }
-
-                        Console.WriteLine("Index: " + item.IndexOf(':'));
-                        // Console.WriteLine(item.Substring(item.IndexOf(':'), item.Length - 1));
+                        description.Append(resultInformation[i]);
+                        lastIndex = lastIndex - 1;
                     }
 
-                    /*
+                    // restore LastIndex to current State
+                    lastIndex = resultInformation.Count - 1;
+
+                    // Remove the last Index N Times so every Description gets removed
+                    int timesToRemove = resultInformation.Count - overviewIndex;
+                    for (int i = 1; i <= timesToRemove; i++)
+                    {
+                        resultInformation.RemoveAt(resultInformation.Count - 1);
+                    }
+
+                    // Then Add description back to List as a whole
+                    resultInformation.Add(description.ToString());
+
+
+
                     Result result = new Result();
+               
+                    var idFirst = resultInformation.FirstOrDefault(element => element.Contains("\"id\""));
+                    if (idFirst != null) result.resultId = int.Parse(idFirst.Split(':')[1].Replace("\"", ""));
 
-                    result.resultId = int.Parse(resultInformation[1]);
-                    result.resultName = resultInformation[2];
-                    result.resultVotes = int.Parse(resultInformation[3]);
-                    result.resultRating = float.Parse(resultInformation[4]);
-                    result.resultPosterPath = resultInformation[5];
-                    result.resultDescription = resultInformation[12];
+                    var nameFirst = resultInformation.FirstOrDefault(element => element.Contains("\"name\""));
+                    if (nameFirst != null)result.resultName = nameFirst.Split(':')[1].Replace("\"", "");
+
+                    var countFirst = resultInformation.FirstOrDefault(element => element.Contains("\"vote_count\""));
+                    if (countFirst != null) result.resultVotes = int.Parse(countFirst.Split(':')[1].Replace("\"", ""));
+
+                    var averageFirst = resultInformation.FirstOrDefault(element => element.Contains("\"vote_average\""));
+                    if (averageFirst != null) result.resultRating = float.Parse(averageFirst.Split(':')[1].Replace("\"", ""));
+
+                    var posterPathFirst = resultInformation.FirstOrDefault(element => element.Contains("\"poster_path\""));
+                    if (posterPathFirst != null) result.resultPosterPath = posterPathFirst.Split(':')[1].Replace("\"", "");
+
+                    var overviewFirst = resultInformation.FirstOrDefault(element => element.Contains("\"overview\""));
+                    if (overviewFirst != null) result.resultDescription = overviewFirst.Split(':')[1].Replace("\"", "");
 
                     resultList.Add(result);
-                    */
-
                 }
 
-                //results.ToList().ForEach(element => Console.WriteLine(element));
-
-
-
-
-
-
-
-
-
-
-
-                /////////////////////////////////
-                // Mal gucken was mit Leerziechen ist, vielleicht müssen wir die ersetzen.
-                // Vielleicht gucken ob das gesuchte Wort auch wirklich enthalten ist /html/body/pre
-
-                /*
-                var Webget = new HtmlWeb();
-                var doc = Webget.Load(html);
-
-                var body = doc.DocumentNode.SelectNodes("/html/body");
-                
-                //var body = doc.DocumentNode.SelectNodes("//*[@id=\"main\"]/div/div[2]/table/tbody/tr[1]/td[2]");
-                foreach (HtmlNode node in body)
-                {
-                    Console.WriteLine(html);
-                    Console.WriteLine(node.InnerText);
-                    if (node.InnerText.ToLower().Contains("tv series") &&
-                       node.InnerText.ToLower().Contains(combobox_search.Text.ToLower()))
-                    {
-                        listSearchResults.Add(node.InnerText);
-                    }
-
-                }
-                */
-                //IEnumerable<string> query = listSearchResults.Where(result => result.ToLower().Contains(("TV Series").ToLower()));
-                combobox_search.ItemsSource = listSearchResults;
+                lastComboBoxSearch = combobox_search.Text;
+                combobox_search.ItemsSource = resultList.Select(element => element.resultName).ToList();
                 combobox_search.Focus();
                 combobox_search.IsDropDownOpen = true;
-
-                //listSearchResults.ForEach(element => Console.WriteLine(listSearchResults.IndexOf(element) + ":" + element));
             }
         }
 
 
+
+        private void combobox_search_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            
+            ComboBox combobox_search = sender as ComboBox;
+            if (combobox_search.SelectedIndex == -1) return;
+            
+            string selectedItem = (string)combobox_search.SelectedItem;
+            int selectedIndex = combobox_search.SelectedIndex;
+            if (lastComboboxIndex == selectedIndex) return;
+            lastComboboxIndex = selectedIndex;
+
+            Result result = resultList[selectedIndex];
+            int id = result.resultId;
+            string name = result.resultName;
+            int votes = result.resultVotes;
+            float rating = result.resultRating;
+            string description = result.resultDescription;
+            string imagePath = result.resultPosterPath;
+
+            label_previewname.Content = name;
+            label_previewviews.Content = votes;
+            label_previewrating.Content = rating.ToString();
+            label_previewid.Content = id;
+
+            textblock_previewdescription.Text = description;
+
+            // PreviewFoto C:\Users\secto\Source\Repos\MediaWatch2\MediaWatch-master\Serienlook
+            string localImagePath = @"C:\Users\secto\Source\Repos\MediaWatch2\MediaWatch-master\Serienlook\Images\" + name + ".png";
+            string posterPathUrl = @"https://image.tmdb.org/t/p/w500/" + imagePath;
+            using (WebClient client = new WebClient())
+            {
+                client.DownloadFile(posterPathUrl, localImagePath);
+            }
+
+
+            BitmapImage b = new BitmapImage();
+            b.BeginInit();
+            b.UriSource = new Uri(localImagePath);
+            b.EndInit();
+
+            image_preview.Source = b;
+        }
     }
 }

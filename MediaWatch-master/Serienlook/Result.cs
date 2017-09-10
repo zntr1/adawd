@@ -17,9 +17,13 @@ namespace Serienlook
         public string resultPosterPath { get; set; }
         public string resultDescription { get; set; }
 
-        public Result()
-        {
-           
+        public Result(){
+            this.resultName = "";
+            this.resultId = 42;
+            this.resultVotes = 42;
+            this.resultRating = 42f;
+            this.resultPosterPath = "/";
+            this.resultDescription = "No Description available";
         }
     }
 }
